@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Driver Terminal - Fail-Safe Edition</title>
+
+  <!-- PWA Settings -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#f59e0b" />
+
+  <!-- Leaflet Map CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Supabase JS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { background: #0b1329; color: #f8fafc; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    
+    header {
+      background: #1e293b;
+      padding: 8px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #f59e0b;
+      flex-shrink: 0;
+    }
+    .header-title { font-size: 1rem; font-weight: 700; color: #f59e0b; }
+    .status-badge {
+      background: #0f172a;
+      border: 1px solid #f59e0b;
+      color: #f59e0b;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+
+    .form-panel {
+      background: #1e293b;
+      padding: 8px 12px;
+      display: flex;
+      gap: 6px;
+      border-bottom: 1px solid #334155;
+      flex-shrink: 0;
+      z-index: 500;
+      flex-wrap: wrap;
+    }
+    input {
+      background: #0f172a;
+      border: 1px solid #475569;
+      color: #fff;
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      flex: 1;
+      min-width: 110px;
+    }
+    input:focus { outline: 2px solid #f59e0b; }
+
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      width: 100%;
+    }
+    button.btn {
+      padding: 9px 12px;
+      border-radius: 6px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: 0.15s;
+    }
+    button.btn-gps-start { background: #16a34a; color: white; flex: 2; }
+    button.btn-gps-stop { background: #dc2626; color: white; flex: 2; }
+    button.btn-step { background: #e11d48; color: white; flex: 2; }
+    button.btn-reset { background: #475569; color: #cbd5e1; }
+    button.btn:active { transform: scale(0.96); }
+
+    #map { flex: 1; width: 100%; height: 100%; background: #0b1329; z-index: 1; }
+
+    .custom-marker {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transform: translate3d(-50%, -100%, 0);
+      pointer-events: none;
+    }
+    .marker-bubble {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      border: 3px solid #ffffff;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.8);
+    }
+    .home-bubble { background: #2563eb; }
+    .bus-bubble { background: #f59e0b; }
+    
+    .marker-tag {
+      background: rgba(15, 23, 42, 0.95);
+      color: #ffffff;
+      padding: 3px 6px;
+      border-radius: 5px;
+      font-size: 10px;
+      font-weight: 700;
+      margin-top: 3px;
+      white-space: nowrap;
+      border: 1px solid #475569;
+    }
+
+    .status-pill {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid #334155;
+      padding: 8px 16px;
+      border-radius: 30px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      max-width: 92%;
+      text-align: center;
+      pointer-events: none;
+    }
+    .dot { width: 8px; height: 8px; background: #f59e0b; border-radius: 50%; animation: pulse 1.2s infinite; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-title">🚍 Driver Live Controller</div>
+    <div class="status-badge" id="stepBadge">WakeLock: ON</div>
+  </header>
+
+  <div class="form-panel">
+    <input type="text" id="driverName" placeholder="Driver Name" value="Ramesh Driver" required />
+    <input type="text" id="busNumber" placeholder="Bus Number" value="UP-32-BUS-101" style="text-transform: uppercase;" required />
+    <div class="btn-row">
+      <button id="btnGPS" class="btn btn-gps-start" onclick="toggleGPSBroadcast()">🚀 Live GPS On</button>
+      <button class="btn btn-step" onclick="stepCloser5Meters()">🚶 5m Paas Aayein</button>
+      <button class="btn btn-reset" onclick="resetBusToDistance(50)">🔄 50m Door</button>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <div class="status-pill">
+    <div class="dot"></div>
+    <span id="statusText">Phone 2 Ready! '5m Paas Aayein' dabakar test karein.</span>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+
+    const SUPABASE_URL = "https://wavraoucbbabjzzzkzor.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhdnJhb3VjYmJhYmp6enprem9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMDE3MTQsImV4cCI6MjEwMzY3NzcxNH0.wYCB_LdoYkVywZrM27UHvpixsZ6qQbQrzd5hSpJSuoI";
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let map = null, driverMarker = null, studentMarker = null;
+    let watchId = null;
+    let studentTargetCoords = null;
+    let simBusCoords = null;
+    let lastGpsSentTime = 0;
+    let lastGpsReceivedTime = Date.now();
+    let wakeLockInstance = null;
+
+    // Screen Wake Lock API (Screen will never sleep)
+    async function activateScreenWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockInstance = await navigator.wakeLock.request('screen');
+        }
+      } catch (err) {}
+    }
+
+    document.addEventListener('visibilitychange', async () => {
+      if (wakeLockInstance !== null && document.visibilityState === 'visible') {
+        activateScreenWakeLock();
+      }
+    });
+
+    function initMap() {
+      activateScreenWakeLock();
+
+      map = L.map('map', { zoomControl: true, maxZoom: 20, preferCanvas: true }).setView([26.8467, 80.9462], 18);
+
+      L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+      }).addTo(map);
+
+      setTimeout(() => { if (map) map.invalidateSize(); }, 200);
+
+      loadStudentPickupFromSupabase();
+
+      // GPS Watchdog Timer (restarts GPS if browser throttles it)
+      setInterval(() => {
+        if (watchId && Date.now() - lastGpsReceivedTime > 7000) {
+          console.warn("GPS Watchdog: Restarting stalled GPS engine...");
+          navigator.geolocation.clearWatch(watchId);
+          startHardwareGPS();
+        }
+      }, 4000);
+    }
+
+    async function loadStudentPickupFromSupabase() {
+      const { data } = await sb.from('student_location').select('*').eq('id', 'MAIN').single();
+
+      if (data && data.lat && data.lng) {
+        studentTargetCoords = { lat: parseFloat(data.lat), lng: parseFloat(data.lng) };
+        renderStudentMarker(data.lat, data.lng, data.student_name);
+        map.setView([data.lat, data.lng], 19, { animate: false });
+        resetBusToDistance(50);
+        document.getElementById('statusText').innerText = `☁️ Connected: ${data.student_name} ka ghar loaded.`;
+      }
+    }
+
+    function renderStudentMarker(lat, lng, name) {
+      const customHtml = `
+        <div class="custom-marker">
+          <div class="marker-bubble home-bubble">🏠</div>
+          <div class="marker-tag">🏠 ${name} ka Ghar</div>
+        </div>
+      `;
+      const homeDivIcon = L.divIcon({
+        className: 'clear-div-icon', html: customHtml, iconSize: [44, 65], iconAnchor: [22, 60]
+      });
+
+      if (studentMarker) map.removeLayer(studentMarker);
+      studentMarker = L.marker([lat, lng], { icon: homeDivIcon }).addTo(map);
+    }
+
+    function resetBusToDistance(meters) {
+      if (!studentTargetCoords) return;
+      const offset = (meters / 111000);
+      simBusCoords = { lat: studentTargetCoords.lat + offset, lng: studentTargetCoords.lng + offset };
+      updateBusMarkerPosition(simBusCoords.lat, simBusCoords.lng, meters);
+      pushLocationToSupabase(simBusCoords.lat, simBusCoords.lng, 25);
+      document.getElementById('statusText').innerText = `Bus reset: ${meters} meters door hai.`;
+      document.getElementById('stepBadge').innerText = `${meters}m`;
+    }
+
+    function stepCloser5Meters() {
+      if (!studentTargetCoords || !simBusCoords) return alert("Pehle Parent page par ghar lock karein!");
+
+      const dLat = studentTargetCoords.lat - simBusCoords.lat;
+      const dLng = studentTargetCoords.lng - simBusCoords.lng;
+      const currentDist = getPreciseDistance(simBusCoords.lat, simBusCoords.lng, studentTargetCoords.lat, studentTargetCoords.lng);
+
+      if (currentDist <= 2) {
+        document.getElementById('statusText').innerText = `Bus bilkul ghar par pahunch chuki hai!`;
+        return;
+      }
+
+      simBusCoords.lat += dLat * 0.22;
+      simBusCoords.lng += dLng * 0.22;
+
+      const newDist = Math.round(getPreciseDistance(simBusCoords.lat, simBusCoords.lng, studentTargetCoords.lat, studentTargetCoords.lng));
+      updateBusMarkerPosition(simBusCoords.lat, simBusCoords.lng, newDist);
+      pushLocationToSupabase(simBusCoords.lat, simBusCoords.lng, 20);
+
+      document.getElementById('statusText').innerText = `🚶 Step Taken! Doori: ${newDist} meters hai.`;
+      document.getElementById('stepBadge').innerText = `${newDist}m`;
+    }
+
+    function updateBusMarkerPosition(lat, lng, dist) {
+      const busNumber = document.getElementById('busNumber').value.trim() || 'Bus';
+      const busHtml = `
+        <div class="custom-marker">
+          <div class="marker-bubble bus-bubble">🚌</div>
+          <div class="marker-tag bus-tag">🚌 ${busNumber} (${dist}m)</div>
+        </div>
+      `;
+      const busDivIcon = L.divIcon({
+        className: 'clear-div-icon', html: busHtml, iconSize: [44, 65], iconAnchor: [22, 60]
+      });
+
+      if (!driverMarker) {
+        driverMarker = L.marker([lat, lng], { icon: busDivIcon }).addTo(map);
+      } else {
+        driverMarker.setLatLng([lat, lng]);
+      }
+    }
+
+    async function pushLocationToSupabase(lat, lng, speed) {
+      const driverName = document.getElementById('driverName').value.trim();
+      const busNumber = document.getElementById('busNumber').value.trim().toUpperCase();
+
+      await sb.from('bus_location').upsert({
+        id: 'MAIN',
+        driver_name: driverName,
+        bus_number: busNumber,
+        lat: lat,
+        lng: lng,
+        speed: speed,
+        updated_at: new Date()
+      });
+    }
+
+    function toggleGPSBroadcast() {
+      const btn = document.getElementById('btnGPS');
+
+      if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        btn.innerText = "🚀 Live GPS On";
+        btn.className = "btn btn-gps-start";
+        document.getElementById('statusText').innerText = "GPS band ho gaya.";
+      } else {
+        if (!navigator.geolocation) return alert("Device me GPS support nahi mila.");
+
+        btn.innerText = "⏹️ Live GPS Stop";
+        btn.className = "btn btn-gps-stop";
+        document.getElementById('statusText').innerText = "Real GPS Broadcast Active...";
+        startHardwareGPS();
+      }
+    }
+
+    function startHardwareGPS() {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          lastGpsReceivedTime = Date.now();
+          const now = Date.now();
+          if (now - lastGpsSentTime > 1000) {
+            lastGpsSentTime = now;
+            const { latitude, longitude, speed } = pos.coords;
+            const speedKmh = speed ? (speed * 3.6) : 0;
+            updateBusMarkerPosition(latitude, longitude, "Live");
+            pushLocationToSupabase(latitude, longitude, speedKmh);
+          }
+        },
+        (err) => console.error("GPS Error:", err),
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+      );
+    }
+
+    function getPreciseDistance(lat1, lon1, lat2, lon2) {
+      lat1 = parseFloat(lat1); lon1 = parseFloat(lon1);
+      lat2 = parseFloat(lat2); lon2 = parseFloat(lon2);
+      if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return 999999;
+      const R = 6371e3;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+    }
+
+    window.addEventListener('DOMContentLoaded', initMap);
+  </script>
+</body>
+</html>
