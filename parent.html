@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>School Bus Tracker - Live Trail</title>
+  <title>School Bus Tracker - Ola/Uber Pro</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   
@@ -42,7 +42,7 @@
   <div class="bottom-card">
     <div class="title-box">
       <div class="title">🚌 School Bus Tracker</div>
-      <div class="status"><span class="dot"></span> Live Route Trail Active</div>
+      <div class="status"><span class="dot"></span> Live Auto-Tracking Active</div>
     </div>
     
     <div class="telemetry-panel">
@@ -55,10 +55,9 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
   <script>
-    var map = L.map('map', {zoomControl: false}).setView([26.9739, 81.9098], 16);
+    var map = L.map('map', {zoomControl: false}).setView([26.9739, 81.9098], 17);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
-    // Stable, clean standard icon (No rotation glitches)
     var busIcon = L.icon({
       iconUrl: 'https://cdn-icons-png.flaticon.com/512/3448/3448339.png',
       iconSize: [42, 42],
@@ -66,13 +65,11 @@
     });
     var busMarker = L.marker([26.9739, 81.9098], {icon: busIcon}).addTo(map);
 
-    // ASLI OLA/UBER FEATURE: Live Route Trail (Bus ke peeche banne wali neeli raste ki line)
     var pathPoints = [];
     var routePolyline = L.polyline([], {
-      color: '#2563eb', // Gorgeous blue route line
+      color: '#2563eb',
       weight: 6,
-      opacity: 0.8,
-      smoothFactor: 1
+      opacity: 0.8
     }).addTo(map);
 
     const supabaseUrl = 'https://wavraoucbbabjzzzkzor.supabase.co';
@@ -82,12 +79,17 @@
     let targetLat = 26.9739, targetLng = 81.9098;
     let displayedLat = 26.9739, displayedLng = 81.9098;
 
-    // 60 FPS Silky Smooth Glide Engine
+    // 60 FPS Smooth Glide + Ola/Uber Style Auto-Pan Camera
     function startSmoothLoop() {
-      displayedLat += (targetLat - displayedLat) * 0.25;
-      displayedLng += (targetLng - displayedLng) * 0.25;
+      displayedLat += (targetLat - displayedLat) * 0.2;
+      displayedLng += (targetLng - displayedLng) * 0.2;
 
-      busMarker.setLatLng([displayedLat, displayedLng]);
+      var currentPos = [displayedLat, displayedLng];
+      busMarker.setLatLng(currentPos);
+      
+      // MAP CAMERA AUTOMATICALLY FOLLOWS THE BUS (Ola/Uber Style)
+      map.panTo(currentPos, { animate: true, duration: 0.5 });
+
       requestAnimationFrame(startSmoothLoop);
     }
     startSmoothLoop();
@@ -96,11 +98,9 @@
       targetLat = lat;
       targetLng = lng;
 
-      // Naye coordinate ko history array me dal kar neeli line update karo
       pathPoints.push([lat, lng]);
       routePolyline.setLatLngs(pathPoints);
 
-      // Text UI update
       document.getElementById('latVal').innerText = Number(lat).toFixed(5);
       document.getElementById('lngVal').innerText = Number(lng).toFixed(5);
 
@@ -117,7 +117,7 @@
         displayedLat = data.lat;
         displayedLng = data.lng;
         busMarker.setLatLng([data.lat, data.lng]);
-        map.setView([data.lat, data.lng], 16);
+        map.setView([data.lat, data.lng], 17);
         
         pathPoints.push([data.lat, data.lng]);
         routePolyline.setLatLngs(pathPoints);
@@ -127,7 +127,6 @@
     }
     init();
 
-    // Realtime WebSocket Listener
     _supabase
       .channel('bus_channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bus_locations', filter: 'bus_id=eq.UP43_BUS_01' }, 
