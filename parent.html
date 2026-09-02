@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>School Bus Tracker - Google Maps Live</title>
+  <title>School Bus Tracker - Live Trail</title>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   
   <style>
     body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
-    
-    /* Google Maps Iframe poori screen par chalega */
-    #mapFrame { width: 100vw; height: 100vh; border: none; }
+    #map { height: 100vh; width: 100vw; }
     
     .bottom-card {
       position: absolute; bottom: 0; width: 100%;
@@ -33,35 +33,16 @@
     }
     .speed-badge { background: #dcfce7; color: #15803d; padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 14px; }
     .coords-text { font-family: monospace; font-size: 11px; color: #64748b; background: #f8fafc; padding: 4px 8px; border-radius: 6px; border: 1.5px solid #e2e8f0; }
-
-    /* Google Maps App kholne ka button */
-    .btn-gmaps {
-      margin-top: 4px;
-      background: #1a73e8;
-      color: white;
-      border: none;
-      padding: 5px 10px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: bold;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-block;
-      text-align: center;
-    }
   </style>
 </head>
 <body>
 
-  <!-- Asli Google Maps Iframe jo live coordinates par re-center hoga -->
-  <iframe id="mapFrame" src="https://maps.google.com/maps?q=26.9739,81.9098&z=17&output=embed"></iframe>
+  <div id="map"></div>
 
   <div class="bottom-card">
     <div class="title-box">
       <div class="title">🚌 School Bus Tracker</div>
-      <div class="status"><span class="dot"></span> Live Google Maps</div>
-      <!-- Asli Google Maps App me kholne ke liye button -->
-      <a id="gmapsBtn" href="https://www.google.com/maps/search/?api=1&query=26.9739,81.9098" target="_blank" class="btn-gmaps">📍 Open in Maps App</a>
+      <div class="status"><span class="dot"></span> Live Route Trail Active</div>
     </div>
     
     <div class="telemetry-panel">
@@ -70,28 +51,54 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
   <script>
+    var map = L.map('map', {zoomControl: false}).setView([26.9739, 81.9098], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+    // Stable, clean standard icon (No rotation glitches)
+    var busIcon = L.icon({
+      iconUrl: 'https://cdn-icons-png.flaticon.com/512/3448/3448339.png',
+      iconSize: [42, 42],
+      iconAnchor: [21, 21]
+    });
+    var busMarker = L.marker([26.9739, 81.9098], {icon: busIcon}).addTo(map);
+
+    // ASLI OLA/UBER FEATURE: Live Route Trail (Bus ke peeche banne wali neeli raste ki line)
+    var pathPoints = [];
+    var routePolyline = L.polyline([], {
+      color: '#2563eb', // Gorgeous blue route line
+      weight: 6,
+      opacity: 0.8,
+      smoothFactor: 1
+    }).addTo(map);
+
     const supabaseUrl = 'https://wavraoucbbabjzzzkzor.supabase.co';
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhdnJhb3VjYmJhYmp6enprem9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMDE3MTQsImV4cCI6MjEwMzY3NzcxNH0.wYCB_LdoYkVywZrM27UHvpixsZ6qQbQrzd5hSpJSuoI';
     const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-    let lastLat = 0;
-    let lastLng = 0;
+    let targetLat = 26.9739, targetLng = 81.9098;
+    let displayedLat = 26.9739, displayedLng = 81.9098;
 
-    function updateGoogleMap(lat, lng, speed) {
-      // Agar coordinate thode se bhi badle hain, toh Google Map ko naye point par refresh kar do
-      if (Math.abs(lat - lastLat) > 0.00001 || Math.abs(lng - lastLng) > 0.00001) {
-        lastLat = lat;
-        lastLng = lng;
-        
-        // Google Maps iframe ka src update hoga taaki map wahan move ho jaye
-        document.getElementById('mapFrame').src = `https://maps.google.com/maps?q=${lat},${lng}&z=17&output=embed`;
-        
-        // Button link update hoga
-        document.getElementById('gmapsBtn').href = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-      }
+    // 60 FPS Silky Smooth Glide Engine
+    function startSmoothLoop() {
+      displayedLat += (targetLat - displayedLat) * 0.25;
+      displayedLng += (targetLng - displayedLng) * 0.25;
+
+      busMarker.setLatLng([displayedLat, displayedLng]);
+      requestAnimationFrame(startSmoothLoop);
+    }
+    startSmoothLoop();
+
+    function updateLiveRoute(lat, lng, speed) {
+      targetLat = lat;
+      targetLng = lng;
+
+      // Naye coordinate ko history array me dal kar neeli line update karo
+      pathPoints.push([lat, lng]);
+      routePolyline.setLatLngs(pathPoints);
 
       // Text UI update
       document.getElementById('latVal').innerText = Number(lat).toFixed(5);
@@ -105,18 +112,28 @@
     async function init() {
       const { data, error } = await _supabase.from('bus_locations').select('lat, lng, speed').eq('bus_id', 'UP43_BUS_01').single();
       if (data && !error) {
-        updateGoogleMap(data.lat, data.lng, data.speed);
+        targetLat = data.lat;
+        targetLng = data.lng;
+        displayedLat = data.lat;
+        displayedLng = data.lng;
+        busMarker.setLatLng([data.lat, data.lng]);
+        map.setView([data.lat, data.lng], 16);
+        
+        pathPoints.push([data.lat, data.lng]);
+        routePolyline.setLatLngs(pathPoints);
+
+        if(data.speed) document.getElementById('displaySpeed').innerText = data.speed;
       }
     }
     init();
 
-    // Supabase Realtime WebSocket Listener
+    // Realtime WebSocket Listener
     _supabase
       .channel('bus_channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bus_locations', filter: 'bus_id=eq.UP43_BUS_01' }, 
         (payload) => {
           if (payload.new && payload.new.lat) {
-            updateGoogleMap(payload.new.lat, payload.new.lng, payload.new.speed);
+            updateLiveRoute(payload.new.lat, payload.new.lng, payload.new.speed);
           }
         }
       )
