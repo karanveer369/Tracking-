@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>School Bus Tracker - Ultra Smooth</title>
+  <title>School Bus Tracker - Rapido Style</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   
@@ -32,7 +32,12 @@
       gap: 6px;
     }
     .speed-badge { background: #dcfce7; color: #15803d; padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 14px; }
-    .coords-text { font-family: monospace; font-size: 11px; color: #64748b; background: #f8fafc; padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; }
+    .coords-text { font-family: monospace; font-size: 11px; color: #64748b; background: #f8fafc; padding: 4px 8px; border-radius: 6px; border: 1.5px solid #e2e8f0; }
+
+    /* Asli Rapido Jaisa Smooth Rotation */
+    .leaflet-marker-icon {
+      transition: transform 0.2s ease-out;
+    }
   </style>
 </head>
 <body>
@@ -42,7 +47,7 @@
   <div class="bottom-card">
     <div class="title-box">
       <div class="title">🚌 School Bus Tracker</div>
-      <div class="status"><span class="dot"></span> Live Connected</div>
+      <div class="status"><span class="dot"></span> Live Rapido Sync</div>
     </div>
     
     <div class="telemetry-panel">
@@ -60,8 +65,8 @@
 
     var busIcon = L.icon({
       iconUrl: 'https://cdn-icons-png.flaticon.com/512/3448/3448339.png',
-      iconSize: [44, 44],
-      iconAnchor: [22, 44]
+      iconSize: [46, 46],
+      iconAnchor: [23, 23] // Center anchor taaki icon apni hi jagah par ghoome
     });
     var busMarker = L.marker([26.9739, 81.9098], {icon: busIcon}).addTo(map);
 
@@ -69,25 +74,50 @@
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhdnJhb3VjYmJhYmp6enprem9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMDE3MTQsImV4cCI6MjEwMzY3NzcxNH0.wYCB_LdoYkVywZrM27UHvpixsZ6qQbQrzd5hSpJSuoI';
     const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-    // Continuous LERP Variables
     let targetLat = 26.9739, targetLng = 81.9098;
     let displayedLat = 26.9739, displayedLng = 81.9098;
+    let currentHeading = 0;
 
-    // 60 FPS Smooth Chase Engine
+    // Do points ke beech ka angle (Heading/Bearing) nikalne ka mathematical formula
+    function calculateBearing(lat1, lon1, lat2, lon2) {
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      lat1 = lat1 * Math.PI / 180;
+      lat2 = lat2 * Math.PI / 180;
+      const y = Math.sin(dLon) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+      let brng = Math.atan2(y, x) * 180 / Math.PI;
+      return (brng + 360) % 360;
+    }
+
+    // 60 FPS Smooth Glide + Rotation Engine
     function startSmoothLoop() {
-      // Har frame me target ki taraf 15% distance cover karega (Silky smooth glide)
       displayedLat += (targetLat - displayedLat) * 0.15;
       displayedLng += (targetLng - displayedLng) * 0.15;
 
       busMarker.setLatLng([displayedLat, displayedLng]);
-      
+
+      // Icon ko rotation angle dena
+      const iconElement = busMarker.getElement();
+      if (iconElement) {
+        iconElement.style.transform = `translate3d(${iconElement._leaflet_pos.x}px, ${iconElement._leaflet_pos.y}px, 0px) rotate(${currentHeading}deg)`;
+      }
+
       requestAnimationFrame(startSmoothLoop);
     }
-    startSmoothLoop(); // Animation loop start
+    startSmoothLoop();
 
     function updateCoordinates(lat, lng, speed) {
-      targetLat = lat; // Naya target set ho gaya, loop khud wahan glide karega
-      targetLng = lng;
+      if (lat !== targetLat || lng !== targetLng) {
+        // Naye aur purane coordinate ke beech ka angle calculate karo
+        if (targetLat !== 0 && targetLng !== 0) {
+          let newHeading = calculateBearing(targetLat, targetLng, lat, lng);
+          if (!isNaN(newHeading)) {
+            currentHeading = newHeading;
+          }
+        }
+        targetLat = lat;
+        targetLng = lng;
+      }
 
       document.getElementById('latVal').innerText = Number(lat).toFixed(5);
       document.getElementById('lngVal').innerText = Number(lng).toFixed(5);
@@ -105,13 +135,12 @@
         displayedLat = data.lat;
         displayedLng = data.lng;
         busMarker.setLatLng([data.lat, data.lng]);
-        map.setView([data.lat, data.lng], 16);
+        map.setView([data.lat, data.lng], 17);
         if(data.speed) document.getElementById('displaySpeed').innerText = data.speed;
       }
     }
     init();
 
-    // Realtime WebSocket Listener
     _supabase
       .channel('bus_channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bus_locations', filter: 'bus_id=eq.UP43_BUS_01' }, 
