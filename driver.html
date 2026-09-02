@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Driver App - Instant Turbo</title>
+  <title>Driver App - Filtered Speed</title>
   <style>
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: white; margin: 0; padding: 20px; text-align: center; display: flex; flex-direction: column; justify-content: center; height: 100vh; box-sizing: border-box; }
     .card { background: #1e293b; padding: 25px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid #334155; }
     h2 { margin-bottom: 5px; color: #38bdf8; }
     .status-box { margin: 20px 0; padding: 15px; border-radius: 12px; background: #0f172a; border: 1px solid #22c55e; display: none; }
     .coords { font-size: 13px; color: #94a3b8; margin-top: 8px; font-family: monospace; }
-    .speed-text { font-size: 24px; color: #22c55e; margin: 5px 0; font-weight: bold; }
+    .speed-text { font-size: 26px; color: #22c55e; margin: 5px 0; font-weight: bold; }
     #dbStatus { display: block; margin-top: 10px; font-size: 13px; font-weight: bold; }
     
     button { padding: 16px; font-size: 18px; font-weight: bold; color: white; border: none; border-radius: 50px; cursor: pointer; width: 100%; transition: 0.2s; }
@@ -21,8 +21,8 @@
 <body>
 
   <div class="card">
-    <h2>⚡ Driver Radar Mode</h2>
-    <p style="color: #94a3b8; font-size: 14px;">Instant Micro-Sync Enabled</p>
+    <h2>👨‍✈️ Driver Dashboard</h2>
+    <p style="color: #94a3b8; font-size: 14px;">Smart GPS Drift Protection</p>
     
     <div id="statusBox" class="status-box">
       <div class="speed-text">⚡ <span id="speedVal">0.0</span> Km/h</div>
@@ -60,16 +60,24 @@
           async (pos) => {
             const lat = pos.coords.latitude;
             const lng = pos.coords.longitude;
-            const rawSpeed = pos.coords.speed || 0;
-            const speed = (rawSpeed * 3.6).toFixed(1);
+            
+            // Raw speed from GPS (m/s to km/h)
+            let rawSpeed = pos.coords.speed || 0;
+            let speedKmh = rawSpeed * 3.6;
+
+            // SMART FILTER: Agar speed 3 km/h se kam hai, toh use 0 maan lo (GPS drift rokne ke liye)
+            if (speedKmh < 3) {
+              speedKmh = 0;
+            }
+            const finalSpeed = speedKmh.toFixed(1);
 
             document.getElementById('coords').innerText = `Lat: ${lat.toFixed(5)} | Lng: ${lng.toFixed(5)}`;
-            document.getElementById('speedVal').innerText = speed;
+            document.getElementById('speedVal').innerText = finalSpeed;
 
-            // Micro-change detection: Agar 0.00001 bhi hila aur 400ms beete hain, turant bhej do
             const now = Date.now();
             const delta = Math.abs(lat - lastLat) + Math.abs(lng - lastLng);
 
+            // Supabase sync when moved or time elapsed
             if (delta > 0.000005 || (now - lastSendTime > 1500)) {
               lastLat = lat;
               lastLng = lng;
@@ -77,10 +85,10 @@
 
               const { error } = await _supabase
                 .from('bus_locations')
-                .upsert({ bus_id: 'UP43_BUS_01', lat: lat, lng: lng, speed: speed }, { onConflict: 'bus_id' });
+                .upsert({ bus_id: 'UP43_BUS_01', lat: lat, lng: lng, speed: finalSpeed }, { onConflict: 'bus_id' });
 
               if (!error) {
-                document.getElementById('dbStatus').innerText = "⚡ Pushed Live Micro-Coordinate!";
+                document.getElementById('dbStatus').innerText = "⚡ Synced Successfully";
                 document.getElementById('dbStatus').style.color = "#22c55e";
               }
             }
