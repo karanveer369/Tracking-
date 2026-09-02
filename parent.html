@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>School Bus Tracker - Live Parent</title>
+  <title>School Bus Tracker - Ultra Smooth</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   
@@ -25,7 +25,6 @@
     .dot { height: 8px; width: 8px; background-color: #22c55e; border-radius: 50%; display: inline-block; animation: pulse 1s infinite; }
     @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
 
-    /* Right Side Telemetry Panel (Speed + Live Coords) */
     .telemetry-panel {
       display: flex;
       flex-direction: column;
@@ -34,8 +33,6 @@
     }
     .speed-badge { background: #dcfce7; color: #15803d; padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 14px; }
     .coords-text { font-family: monospace; font-size: 11px; color: #64748b; background: #f8fafc; padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; }
-
-    .leaflet-marker-icon { transition: transform 1s linear !important; }
   </style>
 </head>
 <body>
@@ -72,15 +69,29 @@
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhdnJhb3VjYmJhYmp6enprem9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMDE3MTQsImV4cCI6MjEwMzY3NzcxNH0.wYCB_LdoYkVywZrM27UHvpixsZ6qQbQrzd5hSpJSuoI';
     const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-    function updateMap(lat, lng, speed) {
-      // Marker position update
-      busMarker.setLatLng([lat, lng]);
+    // Continuous LERP Variables
+    let targetLat = 26.9739, targetLng = 81.9098;
+    let displayedLat = 26.9739, displayedLng = 81.9098;
 
-      // Screen par exact live coordinates show karna
+    // 60 FPS Smooth Chase Engine
+    function startSmoothLoop() {
+      // Har frame me target ki taraf 15% distance cover karega (Silky smooth glide)
+      displayedLat += (targetLat - displayedLat) * 0.15;
+      displayedLng += (targetLng - displayedLng) * 0.15;
+
+      busMarker.setLatLng([displayedLat, displayedLng]);
+      
+      requestAnimationFrame(startSmoothLoop);
+    }
+    startSmoothLoop(); // Animation loop start
+
+    function updateCoordinates(lat, lng, speed) {
+      targetLat = lat; // Naya target set ho gaya, loop khud wahan glide karega
+      targetLng = lng;
+
       document.getElementById('latVal').innerText = Number(lat).toFixed(5);
       document.getElementById('lngVal').innerText = Number(lng).toFixed(5);
 
-      // Speed update
       if (speed !== undefined) {
         document.getElementById('displaySpeed').innerText = speed;
       }
@@ -89,18 +100,24 @@
     async function init() {
       const { data, error } = await _supabase.from('bus_locations').select('lat, lng, speed').eq('bus_id', 'UP43_BUS_01').single();
       if (data && !error) {
-        updateMap(data.lat, data.lng, data.speed);
+        targetLat = data.lat;
+        targetLng = data.lng;
+        displayedLat = data.lat;
+        displayedLng = data.lng;
+        busMarker.setLatLng([data.lat, data.lng]);
         map.setView([data.lat, data.lng], 16);
+        if(data.speed) document.getElementById('displaySpeed').innerText = data.speed;
       }
     }
     init();
 
+    // Realtime WebSocket Listener
     _supabase
       .channel('bus_channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bus_locations', filter: 'bus_id=eq.UP43_BUS_01' }, 
         (payload) => {
           if (payload.new && payload.new.lat) {
-            updateMap(payload.new.lat, payload.new.lng, payload.new.speed);
+            updateCoordinates(payload.new.lat, payload.new.lng, payload.new.speed);
           }
         }
       )
