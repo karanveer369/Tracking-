@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>School Bus Tracker - Live Parent</title>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <style>
+    body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+    #map { height: 100vh; width: 100vw; }
+    
+    .bottom-card {
+      position: absolute; bottom: 0; width: 100%;
+      background: white; border-radius: 25px 25px 0 0;
+      padding: 22px 25px; box-shadow: 0 -10px 25px rgba(0,0,0,0.15);
+      z-index: 1000; box-sizing: border-box;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .title-box { display: flex; flex-direction: column; gap: 4px; }
+    .title { font-size: 18px; font-weight: bold; color: #1e293b; }
+    
+    .status { color: #16a34a; font-weight: bold; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    .dot { height: 8px; width: 8px; background-color: #22c55e; border-radius: 50%; display: inline-block; animation: pulse 1s infinite; }
+    @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+
+    .speed-badge { background: #dcfce7; color: #15803d; padding: 8px 16px; border-radius: 20px; font-weight: 800; font-size: 15px; }
+
+    .leaflet-marker-icon { transition: transform 1s linear !important; }
+  </style>
+</head>
+<body>
+
+  <div id="map"></div>
+
+  <div class="bottom-card">
+    <div class="title-box">
+      <div class="title">🚌 School Bus Tracker</div>
+      <div class="status"><span class="dot"></span> Live Connected</div>
+    </div>
+    <div class="speed-badge">⚡ <span id="displaySpeed">0.0</span> Km/h</div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <script>
+    var map = L.map('map', {zoomControl: false}).setView([26.9739, 81.9098], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+    var busIcon = L.icon({
+      iconUrl: 'https://cdn-icons-png.flaticon.com/512/3448/3448339.png',
+      iconSize: [44, 44],
+      iconAnchor: [22, 44]
+    });
+    var busMarker = L.marker([26.9739, 81.9098], {icon: busIcon}).addTo(map);
+
+    const supabaseUrl = 'https://wavraoucbbabjzzzkzor.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhdnJhb3VjYmJhYmp6enprem9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMDE3MTQsImV4cCI6MjEwMzY3NzcxNH0.wYCB_LdoYkVywZrM27UHvpixsZ6qQbQrzd5hSpJSuoI';
+    const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+    function updateMap(lat, lng, speed) {
+      busMarker.setLatLng([lat, lng]);
+      if (speed !== undefined) {
+        document.getElementById('displaySpeed').innerText = speed;
+      }
+    }
+
+    async function init() {
+      const { data, error } = await _supabase.from('bus_locations').select('lat, lng, speed').eq('bus_id', 'UP43_BUS_01').single();
+      if (data && !error) {
+        updateMap(data.lat, data.lng, data.speed);
+        map.setView([data.lat, data.lng], 16);
+      }
+    }
+    init();
+
+    _supabase
+      .channel('bus_channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bus_locations', filter: 'bus_id=eq.UP43_BUS_01' }, 
+        (payload) => {
+          if (payload.new && payload.new.lat) {
+            updateMap(payload.new.lat, payload.new.lng, payload.new.speed);
+          }
+        }
+      )
+      .subscribe();
+  </script>
+</body>
+</html>
