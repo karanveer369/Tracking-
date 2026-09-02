@@ -14,7 +14,7 @@
     .bottom-card {
       position: absolute; bottom: 0; width: 100%;
       background: white; border-radius: 25px 25px 0 0;
-      padding: 22px 25px; box-shadow: 0 -10px 25px rgba(0,0,0,0.15);
+      padding: 20px 25px; box-shadow: 0 -10px 25px rgba(0,0,0,0.15);
       z-index: 1000; box-sizing: border-box;
       display: flex; justify-content: space-between; align-items: center;
     }
@@ -25,7 +25,15 @@
     .dot { height: 8px; width: 8px; background-color: #22c55e; border-radius: 50%; display: inline-block; animation: pulse 1s infinite; }
     @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
 
-    .speed-badge { background: #dcfce7; color: #15803d; padding: 8px 16px; border-radius: 20px; font-weight: 800; font-size: 15px; }
+    /* Right Side Telemetry Panel (Speed + Live Coords) */
+    .telemetry-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+    .speed-badge { background: #dcfce7; color: #15803d; padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 14px; }
+    .coords-text { font-family: monospace; font-size: 11px; color: #64748b; background: #f8fafc; padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; }
 
     .leaflet-marker-icon { transition: transform 1s linear !important; }
   </style>
@@ -39,7 +47,11 @@
       <div class="title">🚌 School Bus Tracker</div>
       <div class="status"><span class="dot"></span> Live Connected</div>
     </div>
-    <div class="speed-badge">⚡ <span id="displaySpeed">0.0</span> Km/h</div>
+    
+    <div class="telemetry-panel">
+      <div class="speed-badge">⚡ <span id="displaySpeed">0.0</span> Km/h</div>
+      <div class="coords-text">Lat: <span id="latVal">0.00000</span> | Lng: <span id="lngVal">0.00000</span></div>
+    </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -61,7 +73,14 @@
     const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
     function updateMap(lat, lng, speed) {
+      // Marker position update
       busMarker.setLatLng([lat, lng]);
+
+      // Screen par exact live coordinates show karna
+      document.getElementById('latVal').innerText = Number(lat).toFixed(5);
+      document.getElementById('lngVal').innerText = Number(lng).toFixed(5);
+
+      // Speed update
       if (speed !== undefined) {
         document.getElementById('displaySpeed').innerText = speed;
       }
