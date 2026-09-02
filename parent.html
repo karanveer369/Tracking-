@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>School Bus Tracker - Professional Pro</title>
+  <title>School Bus Tracker - Ola/Uber Pro</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   
@@ -34,14 +34,13 @@
     .speed-badge { background: #dcfce7; color: #15803d; padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 14px; }
     .coords-text { font-family: monospace; font-size: 11px; color: #64748b; background: #f8fafc; padding: 4px 8px; border-radius: 6px; border: 1.5px solid #e2e8f0; }
 
-    /* Clean inner image container for flawless rotation */
     .bus-icon-container {
       width: 44px; height: 44px;
       display: flex; align-items: center; justify-content: center;
     }
     .bus-icon-container img {
       width: 40px; height: 40px;
-      transition: transform 0.2s ease-out;
+      transition: transform 0.15s ease-out;
       transform-origin: center center;
     }
   </style>
@@ -53,7 +52,7 @@
   <div class="bottom-card">
     <div class="title-box">
       <div class="title">🚌 School Bus Tracker</div>
-      <div class="status"><span class="dot"></span> Live Connected</div>
+      <div class="status"><span class="dot"></span> Live Ola/Uber Sync</div>
     </div>
     
     <div class="telemetry-panel">
@@ -66,10 +65,9 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
   <script>
-    var map = L.map('map', {zoomControl: false}).setView([26.9739, 81.9098], 16);
+    var map = L.map('map', {zoomControl: false}).setView([26.9739, 81.9098], 17);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
-    // DivIcon use kiya hai taaki Leaflet ka positioning aur hamara rotation conflict na kare
     var busDivIcon = L.divIcon({
       className: '',
       html: '<div class="bus-icon-container"><img id="busImg" src="https://cdn-icons-png.flaticon.com/512/3448/3448339.png" /></div>',
@@ -97,14 +95,13 @@
       return (brng + 360) % 360;
     }
 
-    // 60 FPS Silky Smooth Animation Loop
+    // OLA/UBER GRADE SNAP-GLIDE ENGINE (Super-responsive 0.35 factor)
     function startSmoothLoop() {
-      displayedLat += (targetLat - displayedLat) * 0.15;
-      displayedLng += (targetLng - displayedLng) * 0.15;
+      displayedLat += (targetLat - displayedLat) * 0.35;
+      displayedLng += (targetLng - displayedLng) * 0.35;
 
       busMarker.setLatLng([displayedLat, displayedLng]);
 
-      // Sirf inner image rotate hogi, marker container safe rahega
       const busImg = document.getElementById('busImg');
       if (busImg) {
         busImg.style.transform = `rotate(${currentHeading}deg)`;
@@ -114,23 +111,24 @@
     }
     startSmoothLoop();
 
-    function updateCoordinates(lat, lng, speed) {
+    function processIncomingData(lat, lng, speed) {
+      // 1. Text UI ko BINA KISI DELAY ke turant update karo (Ola/Uber style instant sync)
+      document.getElementById('latVal').innerText = Number(lat).toFixed(5);
+      document.getElementById('lngVal').innerText = Number(lng).toFixed(5);
+      if (speed !== undefined) {
+        document.getElementById('displaySpeed').innerText = speed;
+      }
+
+      // 2. Target coordinates set karo animation ke liye
       if (lat !== targetLat || lng !== targetLng) {
         if (targetLat !== 0 && targetLng !== 0) {
           let newHeading = calculateBearing(targetLat, targetLng, lat, lng);
-          if (!isNaN(newHeading) && speed > 2) {
+          if (!isNaN(newHeading)) {
             currentHeading = newHeading;
           }
         }
         targetLat = lat;
         targetLng = lng;
-      }
-
-      document.getElementById('latVal').innerText = Number(lat).toFixed(5);
-      document.getElementById('lngVal').innerText = Number(lng).toFixed(5);
-
-      if (speed !== undefined) {
-        document.getElementById('displaySpeed').innerText = speed;
       }
     }
 
@@ -143,17 +141,18 @@
         displayedLng = data.lng;
         busMarker.setLatLng([data.lat, data.lng]);
         map.setView([data.lat, data.lng], 17);
-        if(data.speed) document.getElementById('displaySpeed').innerText = data.speed;
+        processIncomingData(data.lat, data.lng, data.speed);
       }
     }
     init();
 
+    // Instant Realtime WebSocket Listener
     _supabase
       .channel('bus_channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bus_locations', filter: 'bus_id=eq.UP43_BUS_01' }, 
         (payload) => {
           if (payload.new && payload.new.lat) {
-            updateCoordinates(payload.new.lat, payload.new.lng, payload.new.speed);
+            processIncomingData(payload.new.lat, payload.new.lng, payload.new.speed);
           }
         }
       )
